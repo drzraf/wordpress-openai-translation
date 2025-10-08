@@ -1,13 +1,32 @@
 const { __ } = wp.i18n;
 const { registerPlugin } = wp.plugins;
-const { useState } = wp.element;
-const { PanelBody, PanelRow, Button, Dropdown, MenuGroup, MenuItem, Spinner } = wp.components;
+const { useState, useEffect } = wp.element;
+const { PanelBody, PanelRow, Button, Dropdown, MenuGroup, MenuItem, Spinner, SelectControl } = wp.components;
 const { PluginSidebar } = wp.editPost;
 const { useSelect, useDispatch } = wp.data;
 const apiFetch = wp.apiFetch;
 
 const TranslationPanel = () => {
     const [isTranslating, setIsTranslating] = useState(false);
+    const [selectedBackend, setSelectedBackend] = useState('');
+    const [backends, setBackends] = useState({});
+    const [languages, setLanguages] = useState([]);
+
+    // Initialize from global config
+    useEffect(() => {
+        if (window.translationConfig) {
+            const availableBackends = window.translationConfig.backends || {};
+            setBackends(availableBackends);
+            
+            // Set default backend to the first available one
+            const backendKeys = Object.keys(availableBackends);
+            if (backendKeys.length > 0 && !selectedBackend) {
+                setSelectedBackend(backendKeys[0]);
+            }
+
+            setLanguages(window.translationConfig.languages || []);
+        }
+    }, []);
 
     // Get current post title and blocks from the editor
     const { title, blocks } = useSelect((select) => ({
@@ -16,15 +35,26 @@ const TranslationPanel = () => {
     }), []);
 
     // Get dispatch functions for updating editor content
-    const { editPost } = useDispatch('core/editor');
+    const { editPost, lockPostSaving, unlockPostSaving } = useDispatch('core/editor');
     const { replaceBlocks } = useDispatch('core/block-editor');
+    const { lockPostAutosaving, unlockPostAutosaving } = useDispatch('core/editor');
 
     const handleTranslation = async (language) => {
+        if (!selectedBackend) {
+            alert(__('No translation backend selected', 'wordpress-openai-translation'));
+            return;
+        }
+
         setIsTranslating(true);
 
+        // Lock the editor to prevent concurrent edits
+        lockPostSaving('translation-in-progress');
+        lockPostAutosaving('translation-in-progress');
+
         try {
+            const restNamespace = window.translationConfig?.restNamespace || 'wp-translation/v1';
             const response = await apiFetch({
-                path: '/openai-translation/v1/translate',
+                path: `/${restNamespace}/translate-${selectedBackend}`,
                 method: 'POST',
                 data: {
                     title,
@@ -32,6 +62,11 @@ const TranslationPanel = () => {
                     language,
                 },
             });
+
+            if (response.errors) {
+                const errorMessages = Object.values(response.errors).join(', ');
+                throw new Error(errorMessages);
+            }
 
             // Update the post title
             editPost({ title: response.title });
@@ -51,23 +86,44 @@ const TranslationPanel = () => {
             alert(error.message || __('Translation failed', 'wordpress-openai-translation'));
         } finally {
             setIsTranslating(false);
+            // Unlock the editor
+            unlockPostSaving('translation-in-progress');
+            unlockPostAutosaving('translation-in-progress');
         }
     };
 
-    const languages = [
-        { code: 'en_GB', label: __('English (GB)', 'wordpress-openai-translation') },
-        { code: 'en_US', label: __('English (US)', 'wordpress-openai-translation') },
-        { code: 'fr_FR', label: __('French', 'wordpress-openai-translation') },
-        { code: 'es_ES', label: __('Spanish', 'wordpress-openai-translation') },
-        { code: 'de_DE', label: __('German', 'wordpress-openai-translation') },
-        { code: 'it_IT', label: __('Italian', 'wordpress-openai-translation') },
-        { code: 'ja_JP', label: __('Japanese', 'wordpress-openai-translation') },
-    ];
+    const backendKeys = Object.keys(backends);
+    const showBackendSelector = backendKeys.length > 1;
 
     return (
         <PanelBody title={__('Translation', 'wordpress-openai-translation')}>
+            {showBackendSelector && (
+                <PanelRow>
+                    <SelectControl
+                        label={__('Translation Backend', 'wordpress-openai-translation')}
+                        value={selectedBackend}
+                        options={[
+                            { value: '', label: __('Select backend...', 'wordpress-openai-translation'), disabled: true },
+                            ...backendKeys.map(key => ({
+                                value: key,
+                                label: backends[key]
+                            }))
+                        ]}
+                        onChange={setSelectedBackend}
+                        disabled={isTranslating}
+                    />
+                </PanelRow>
+            )}
+
             <PanelRow>
                 <div style={{ width: '100%' }}>
+                    <div style={{ marginBottom: '8px', fontSize: '11px', color: '#757575' }}>
+                        {selectedBackend && backends[selectedBackend] && (
+                            <span>
+                                {__('Using:', 'wordpress-openai-translation')} <strong>{backends[selectedBackend]}</strong>
+                            </span>
+                        )}
+                    </div>
                     <Dropdown
                         className="translation-dropdown"
                         contentClassName="translation-dropdown-content"
@@ -76,7 +132,7 @@ const TranslationPanel = () => {
                             <Button
                                 onClick={onToggle}
                                 aria-expanded={isOpen}
-                                disabled={isTranslating}
+                                disabled={isTranslating || !selectedBackend}
                                 variant="secondary"
                                 style={{ width: '100%' }}
                             >
@@ -116,7 +172,7 @@ const TranslationSidebar = () => {
     return (
         <PluginSidebar
             name="openai-translation-sidebar"
-            title={__('OpenAI Translation', 'wordpress-openai-translation')}
+            title={__('Translation', 'wordpress-openai-translation')}
             icon="translation"
         >
             <TranslationPanel />

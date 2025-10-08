@@ -9,7 +9,12 @@ final class Installation
 
     const OPENAI_TRANSLATION_ACTIVATED = 'openai_translation_activated';
 
-    public function __construct(string $file, private readonly string $validatorName, private readonly string $apiKey)
+    public function __construct(
+        string $file,
+        private readonly string $validatorName,
+        private readonly string $openaiApiKey,
+        private readonly string $deeplApiKey
+    )
     {
         $this->file = $file;
         register_activation_hook($file, [$this, 'plugin_activation']);
@@ -24,21 +29,26 @@ final class Installation
     public function notices_activation(): void
     {
         if (get_transient(self::OPENAI_TRANSLATION_ACTIVATED)) {
-            $apiKey = get_option('openai_translation_api_key');
-            if (empty($apiKey) && empty($this->apiKey)) {
-                $this->render('notices-empty-openaikey');
-                return;
-            } elseif (empty($apiKey)) {
-                add_option('openai_translation_api_key', $this->apiKey);
+            // Handle OpenAI API key
+            $openaiKey = get_option('openai_translation_api_key');
+            if (empty($openaiKey) && !empty($this->openaiApiKey)) {
+                add_option('openai_translation_api_key', $this->openaiApiKey);
             }
 
+            // Handle DeepL API key
+            $deeplKey = get_option('deepl_translation_api_key');
+            if (empty($deeplKey) && !empty($this->deeplApiKey)) {
+                add_option('deepl_translation_api_key', $this->deeplApiKey);
+            }
+
+            // Handle validator name
             $validatorName = get_option('openai_translation_validator_name');
             if (empty($validatorName)) {
                 add_option('openai_translation_validator_name', $this->validatorName);
             }
 
             $this->render('notices', [
-                'message' => 'OpenAI Translation plugin is now activated!',
+                'message' => 'Translation plugin is now activated!',
             ]);
             delete_transient(self::OPENAI_TRANSLATION_ACTIVATED);
         }

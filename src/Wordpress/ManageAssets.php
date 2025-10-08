@@ -32,13 +32,15 @@ final class ManageAssets
                 'wp-compose',
                 'wp-api-fetch'
             ],
-            '1.1.0',
+            '1.2.0',
             false
         );
 
-        // Localize script with REST API URL
-        wp_localize_script('openai-translation-gutenberg-editor', 'openaiTranslation', [
-            'restUrl' => rest_url(TranslationPlugin::NAMESPACE . '/translate'),
+        // Pass available backends, languages, and REST API namespace to JS
+        wp_localize_script('openai-translation-gutenberg-editor', 'translationConfig', [
+            'restNamespace' => TranslationPlugin::NAMESPACE,
+            'backends' => TranslationPlugin::getAvailableBackends(),
+            'languages' => TranslationPlugin::getLanguageList(),
         ]);
     }
 }
