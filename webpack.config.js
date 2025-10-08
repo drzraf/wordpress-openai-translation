@@ -5,7 +5,8 @@ const MiniCssExtractPlugin = require("mini-css-extract-plugin");
 module.exports = {
 	...defaultConfig,
 	entry: {
-		"editor": "./assets/js/editor.js"
+		"editor": "./assets/js/editor.js",
+		"block-editor": "./assets/js/block-editor.js"
 	},
 	output: {
 		filename: '[name].js',

@@ -25,12 +25,24 @@ final class Endpoints
     {
         $backends = ['openai', 'google', 'deepl'];
 
+        // Full post translation endpoints
         foreach ($backends as $backend) {
             register_rest_route(TranslationPlugin::NAMESPACE, '/translate-' . $backend, [
                 'methods' => \WP_REST_Server::CREATABLE,
                 'permission_callback' => [$this, 'privileged_permission_callback'],
                 'callback' => function(\WP_REST_Request $request) use ($backend) {
                     return $this->translate_text($request, $backend);
+                },
+            ]);
+        }
+
+        // Block translation endpoints
+        foreach ($backends as $backend) {
+            register_rest_route(TranslationPlugin::NAMESPACE, '/translate-block-' . $backend, [
+                'methods' => \WP_REST_Server::CREATABLE,
+                'permission_callback' => [$this, 'privileged_permission_callback'],
+                'callback' => function(\WP_REST_Request $request) use ($backend) {
+                    return $this->translate_single_block($request, $backend);
                 },
             ]);
         }
@@ -107,5 +119,72 @@ final class Endpoints
         }
 
         return $response;
+    }
+
+    public function translate_single_block(\WP_REST_Request $request, string $backend): \WP_REST_Response
+    {
+        $response = new \WP_REST_Response();
+
+        // Create translator instance
+        $translator = $this->createTranslator($backend);
+        if (!$translator) {
+            $response->set_data([
+                'error' => 'Translation backend not available or not configured'
+            ]);
+            $response->set_status(400);
+            return $response;
+        }
+
+        $block = $request->get_param('block');
+        $language = $request->get_param('language');
+
+        if (empty($block) || empty($language)) {
+            $response->set_data([
+                'error' => 'Missing required parameters: block or language'
+            ]);
+            $response->set_status(400);
+            return $response;
+        }
+
+        try {
+            // Extract content from block based on type
+            $content = $this->extractBlockContent($block);
+
+            if (empty($content)) {
+                $response->set_data([
+                    'error' => 'No translatable content found in block'
+                ]);
+                $response->set_status(400);
+                return $response;
+            }
+
+            // Translate the content
+            $translatedContent = $translator->translate($content, $language);
+
+            $response->set_data([
+                'translatedContent' => $translatedContent,
+                'originalContent' => $content,
+                'blockType' => $block['name'] ?? 'unknown',
+            ]);
+        } catch (\Exception $e) {
+            $response->set_data([
+                'error' => $e->getMessage()
+            ]);
+            $response->set_status(500);
+        }
+
+        return $response;
+    }
+
+    private function extractBlockContent(array $block): string
+    {
+        $blockType = $block['name'] ?? '';
+        $attributes = $block['attributes'] ?? [];
+
+        return match($blockType) {
+            'core/paragraph', 'core/heading', 'core/quote' => $attributes['content'] ?? '',
+            'core/list' => $attributes['values'] ?? '',
+            default => $attributes['content'] ?? '',
+        };
     }
 }

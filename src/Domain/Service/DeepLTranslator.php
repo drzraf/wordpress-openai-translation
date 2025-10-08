@@ -62,7 +62,7 @@ final class DeepLTranslator implements TranslatorInterface
     {
         // DeepL uses language codes like EN, DE, FR, ES, IT, JA, etc.
         // For some languages it supports variants like EN-GB, EN-US, PT-BR, PT-PT
-        
+
         $mapping = [
             'en_GB' => 'EN-GB',
             'en_US' => 'EN-US',

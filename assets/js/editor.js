@@ -6,6 +6,8 @@ const { PluginSidebar } = wp.editPost;
 const { useSelect, useDispatch } = wp.data;
 const apiFetch = wp.apiFetch;
 
+import { BackendManager } from './utils/backend-manager';
+
 const TranslationPanel = () => {
     const [isTranslating, setIsTranslating] = useState(false);
     const [selectedBackend, setSelectedBackend] = useState('');
@@ -17,16 +19,20 @@ const TranslationPanel = () => {
         if (window.translationConfig) {
             const availableBackends = window.translationConfig.backends || {};
             setBackends(availableBackends);
-            
-            // Set default backend to the first available one
-            const backendKeys = Object.keys(availableBackends);
-            if (backendKeys.length > 0 && !selectedBackend) {
-                setSelectedBackend(backendKeys[0]);
-            }
+
+            // Get backend from manager (synced across components)
+            const currentBackend = BackendManager.getSelectedBackend();
+            setSelectedBackend(currentBackend);
 
             setLanguages(window.translationConfig.languages || []);
         }
     }, []);
+
+    // Sync backend changes across components
+    const handleBackendChange = (backend) => {
+        setSelectedBackend(backend);
+        BackendManager.setSelectedBackend(backend);
+    };
 
     // Get current post title and blocks from the editor
     const { title, blocks } = useSelect((select) => ({
@@ -109,7 +115,7 @@ const TranslationPanel = () => {
                                 label: backends[key]
                             }))
                         ]}
-                        onChange={setSelectedBackend}
+                        onChange={handleBackendChange}
                         disabled={isTranslating}
                     />
                 </PanelRow>

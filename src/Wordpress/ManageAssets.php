@@ -17,6 +17,7 @@ final class ManageAssets
 
     public function load_editor_assets(): void
     {
+        // Main sidebar plugin
         wp_enqueue_script(
             'openai-translation-gutenberg-editor',
             plugin_dir_url($this->file) . 'assets/build/editor.js',
@@ -36,8 +37,34 @@ final class ManageAssets
             false
         );
 
+        // Block-level controls (translation and rollback buttons)
+        wp_enqueue_script(
+            'openai-translation-block-controls',
+            plugin_dir_url($this->file) . 'assets/build/block-editor.js',
+            [
+                'wp-i18n',
+                'wp-element',
+                'wp-blocks',
+                'wp-components',
+                'wp-block-editor',
+                'wp-data',
+                'wp-hooks',
+                'wp-compose',
+                'wp-api-fetch'
+            ],
+            '1.2.0',
+            false
+        );
+
         // Pass available backends, languages, and REST API namespace to JS
         wp_localize_script('openai-translation-gutenberg-editor', 'translationConfig', [
+            'restNamespace' => TranslationPlugin::NAMESPACE,
+            'backends' => TranslationPlugin::getAvailableBackends(),
+            'languages' => TranslationPlugin::getLanguageList(),
+        ]);
+
+        // Make config available to block controls as well
+        wp_localize_script('openai-translation-block-controls', 'translationConfig', [
             'restNamespace' => TranslationPlugin::NAMESPACE,
             'backends' => TranslationPlugin::getAvailableBackends(),
             'languages' => TranslationPlugin::getLanguageList(),
