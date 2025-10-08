@@ -14,11 +14,11 @@ if (!function_exists('add_action')) {
     exit;
 }
 
-if (!defined('OPENAI_SECRET')) {
-define('OPENAI_SECRET', getenv('OPENAI_SECRET') ?: '');
+if (!defined('OPENAI_API_KEY')) {
+    define('OPENAI_API_KEY', getenv('OPENAI_API_KEY') ?: '');
 }
-if (!defined('DEEPL_SECRET')) {
-define('DEEPL_SECRET', getenv('DEEPL_SECRET') ?: '');
+if (!defined('DEEPL_API_KEY')) {
+    define('DEEPL_API_KEY', getenv('DEEPL_API_KEY') ?: '');
 }
 
 define('OPENAI_TRANSLATION_VALIDATOR', getenv('OPENAI_TRANSLATION_VALIDATOR') ?: 'custom');
@@ -28,6 +28,9 @@ if (!defined('TRANSLATION_LANGUAGES')) {
     define('TRANSLATION_LANGUAGES', 'en_GB,en_US,fr_FR,es_ES,de_DE,it_IT,ja_JP,pl_PL,nl_NL,ro_RO,pt_PT,cs_CZ');
 }
 
-require plugin_dir_path(__FILE__) . 'vendor/autoload.php';
+$autoload = plugin_dir_path(__FILE__) . 'vendor/autoload.php';
+if (file_exists($autoload)) {
+    require $autoload;
+}
 
-$plugin = new Translation\TranslationPlugin(__FILE__, OPENAI_SECRET, DEEPL_SECRET, OPENAI_TRANSLATION_VALIDATOR);
+$plugin = new Translation\TranslationPlugin(__FILE__, OPENAI_API_KEY, DEEPL_API_KEY, OPENAI_TRANSLATION_VALIDATOR);

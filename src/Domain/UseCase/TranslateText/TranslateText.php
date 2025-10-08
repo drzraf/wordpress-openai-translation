@@ -62,22 +62,45 @@ final readonly class TranslateText
         array_map(fn($block) => $this->translateBlock($block, $request->targetLanguage, $response), $request->blocks);
     }
 
-    private function translateBlock(array $block, string $targetLanguage, TranslateTextResponse $response): void
+    public function translateBlock(array $block, string $targetLanguage, TranslateTextResponse $response): void
     {
-        switch ($block['name']) {
-            case 'core/paragraph':
-                $translation = $this->translator->translate(
-                    text: $block['attributes']['content'],
-                    targetLanguage: $targetLanguage
-                );
-                if (!$translation) {
-                    $response->addError('internal', 'internal.error.translation_failed');
-                    return;
-                }
-                $block['attributes']['content'] = $translation;
-                $response->addBlock($block);
-                break;
+        $blockName = $block['name'] ?? '';
+        $attributes = $block['attributes'] ?? [];
+
+        // Extract content based on block type
+        $content = match($blockName) {
+            'core/paragraph', 'core/heading', 'core/quote' => $attributes['content'] ?? '',
+            'core/list' => $attributes['values'] ?? '',
+            default => $attributes['content'] ?? '',
+        };
+
+        if (empty($content)) {
+            $response->addError('internal', 'internal.error.no_content for ' . $blockName);
+            return;
         }
+
+        // Translate the content
+        $translation = $this->translator->translate(
+            text: $content,
+            targetLanguage: $targetLanguage
+        );
+
+        if (!$translation) {
+            $response->addError('internal', 'internal.error.translation_failed');
+            return;
+        }
+
+        // Update block with translated content
+        $block['attributes'][$this->getContentAttributeName($blockName)] = $translation;
+        $response->addBlock($block);
+    }
+
+    private function getContentAttributeName(string $blockName): string
+    {
+        return match($blockName) {
+            'core/list' => 'values',
+            default => 'content',
+        };
     }
 
     private function translateTitle(string $title, string $targetLanguage, TranslateTextResponse $response): void

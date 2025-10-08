@@ -87,8 +87,8 @@ export const BlockTranslationControl = ({ clientId, attributes, name }) => {
     };
 
     const backendName = BackendManager.getBackendName(currentBackend);
-    const tooltipLabel = isTranslating
-        ? __('Translating...', 'wordpress-openai-translation')
+    const tooltipLabel = isTranslating 
+        ? __('Translating Block...', 'wordpress-openai-translation')
         : __('Translate Block', 'wordpress-openai-translation') + ' (' + backendName + ')';
 
     return (
@@ -99,11 +99,14 @@ export const BlockTranslationControl = ({ clientId, attributes, name }) => {
                     popoverProps={{ placement: 'bottom-start' }}
                     renderToggle={({ isOpen, onToggle }) => (
                         <ToolbarButton
-                            icon={isTranslating ? undefined : 'translation'}
+                            icon={isTranslating ? undefined : 'editor-quote'}
                             label={tooltipLabel}
                             onClick={onToggle}
                             aria-expanded={isOpen}
                             disabled={isTranslating}
+                            style={{
+                                color: isTranslating ? '#666' : '#2271b1'
+                            }}
                         >
                             {isTranslating && <Spinner style={{ margin: 0 }} />}
                         </ToolbarButton>
@@ -117,9 +120,14 @@ export const BlockTranslationControl = ({ clientId, attributes, name }) => {
                                 color: '#666',
                                 background: '#f9f9f9'
                             }}>
-                                {__('Using:', 'wordpress-openai-translation')} <strong>{backendName}</strong>
+                                <div style={{ fontWeight: '600', marginBottom: '2px' }}>
+                                    {__('Block Translation', 'wordpress-openai-translation')}
+                                </div>
+                                <div>
+                                    {__('Using:', 'wordpress-openai-translation')} <strong>{backendName}</strong>
+                                </div>
                             </div>
-                            <MenuGroup label={__('Select Language', 'wordpress-openai-translation')}>
+                            <MenuGroup>
                                 {languages.map((lang) => (
                                     <MenuItem
                                         key={lang.code}
@@ -127,6 +135,8 @@ export const BlockTranslationControl = ({ clientId, attributes, name }) => {
                                             translateBlock(lang.code, currentBackend);
                                             onClose();
                                         }}
+                                        icon="editor-quote"
+                                        iconPosition="left"
                                     >
                                         {lang.label}
                                     </MenuItem>

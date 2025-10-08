@@ -11,6 +11,7 @@ use Translation\Domain\Service\SymfonyLocaleValidator;
 use Translation\Domain\Service\TranslatorInterface;
 use Translation\Domain\UseCase\TranslateText\TranslateText;
 use Translation\Domain\UseCase\TranslateText\TranslateTextRequest;
+use Translation\Domain\UseCase\TranslateText\TranslateTextResponse;
 use Translation\Presentation\TranslateTextJsonPresenter;
 use Translation\TranslationPlugin;
 
@@ -36,7 +37,7 @@ final class Endpoints
             ]);
         }
 
-        // Block translation endpoints
+        // Block translation endpoints - reuses TranslateText use case
         foreach ($backends as $backend) {
             register_rest_route(TranslationPlugin::NAMESPACE, '/translate-block-' . $backend, [
                 'methods' => \WP_REST_Server::CREATABLE,
@@ -61,6 +62,19 @@ final class Endpoints
             'deepl' => $this->createDeepLTranslator(),
             default => null,
         };
+    }
+
+    private function createValidator(): \Translation\Domain\Service\LocaleValidatorInterface
+    {
+        if (
+            get_option('openai_translation_validator_name') === 'symfony' &&
+            class_exists('Symfony\Component\Validator\Constraints\Locale') &&
+            class_exists('Symfony\Component\Validator\Validation')
+        ) {
+            return new SymfonyLocaleValidator();
+        }
+        
+        return new CustomLocaleValidator();
     }
 
     private function createOpenAITranslator(): ?OpenAITranslator
@@ -96,11 +110,7 @@ final class Endpoints
         }
 
         // Init use case
-        $validator = match (get_option('openai_translation_validator_name')) {
-            'symfony' => new SymfonyLocaleValidator(),
-            default => new CustomLocaleValidator(),
-        };
-        $translateText = new TranslateText($translator, $validator);
+        $translateText = new TranslateText($translator, $this->createValidator());
         $presenter = new TranslateTextJsonPresenter();
 
         // Create request
@@ -147,24 +157,44 @@ final class Endpoints
         }
 
         try {
-            // Extract content from block based on type
-            $content = $this->extractBlockContent($block);
+            // Reuse TranslateText use case for single block translation
+            $translateText = new TranslateText($translator, $this->createValidator());
+            $translateResponse = new TranslateTextResponse();
 
-            if (empty($content)) {
+            // Translate the single block using the existing use case method
+            $translateText->translateBlock($block, $language, $translateResponse);
+
+            if ($translateResponse->hasErrors()) {
                 $response->set_data([
-                    'error' => 'No translatable content found in block'
+                    'error' => 'Translation failed: ' . json_encode($translateResponse->getErrors())
                 ]);
                 $response->set_status(400);
                 return $response;
             }
 
-            // Translate the content
-            $translatedContent = $translator->translate($content, $language);
+            // Get the translated block
+            $translatedBlocks = $translateResponse->getBlocks();
+            if (empty($translatedBlocks)) {
+                $response->set_data([
+                    'error' => 'No translated content returned'
+                ]);
+                $response->set_status(500);
+                return $response;
+            }
+
+            $translatedBlock = $translatedBlocks[0];
+            
+            // Extract translated content based on block type
+            $blockName = $block['name'] ?? '';
+            $contentAttribute = match($blockName) {
+                'core/list' => 'values',
+                default => 'content',
+            };
 
             $response->set_data([
-                'translatedContent' => $translatedContent,
-                'originalContent' => $content,
-                'blockType' => $block['name'] ?? 'unknown',
+                'translatedContent' => $translatedBlock['attributes'][$contentAttribute] ?? '',
+                'originalContent' => $block['attributes'][$contentAttribute] ?? '',
+                'blockType' => $blockName,
             ]);
         } catch (\Exception $e) {
             $response->set_data([
@@ -174,17 +204,5 @@ final class Endpoints
         }
 
         return $response;
-    }
-
-    private function extractBlockContent(array $block): string
-    {
-        $blockType = $block['name'] ?? '';
-        $attributes = $block['attributes'] ?? [];
-
-        return match($blockType) {
-            'core/paragraph', 'core/heading', 'core/quote' => $attributes['content'] ?? '',
-            'core/list' => $attributes['values'] ?? '',
-            default => $attributes['content'] ?? '',
-        };
     }
 }

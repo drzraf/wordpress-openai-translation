@@ -57,17 +57,14 @@ final class ManageAssets
         );
 
         // Pass available backends, languages, and REST API namespace to JS
-        wp_localize_script('openai-translation-gutenberg-editor', 'translationConfig', [
+        // Make config available to all scripts
+        $config = [
             'restNamespace' => TranslationPlugin::NAMESPACE,
             'backends' => TranslationPlugin::getAvailableBackends(),
             'languages' => TranslationPlugin::getLanguageList(),
-        ]);
+        ];
 
-        // Make config available to block controls as well
-        wp_localize_script('openai-translation-block-controls', 'translationConfig', [
-            'restNamespace' => TranslationPlugin::NAMESPACE,
-            'backends' => TranslationPlugin::getAvailableBackends(),
-            'languages' => TranslationPlugin::getLanguageList(),
-        ]);
+        wp_localize_script('openai-translation-gutenberg-editor', 'translationConfig', $config);
+        wp_localize_script('openai-translation-block-controls', 'translationConfig', $config);
     }
 }
