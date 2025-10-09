@@ -66,5 +66,6 @@ final class ManageAssets
 
         wp_localize_script('openai-translation-gutenberg-editor', 'translationConfig', $config);
         wp_localize_script('openai-translation-block-controls', 'translationConfig', $config);
+        wp_enqueue_style('openai-translation-gutenberg-editor-css', plugin_dir_url($this->file) . 'assets/editor-style.css');
     }
 }
