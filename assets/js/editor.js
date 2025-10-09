@@ -16,6 +16,7 @@ const TranslationPanel = () => {
     const [selectedBackend, setSelectedBackend] = useState('');
     const [backends, setBackends] = useState({});
     const [languages, setLanguages] = useState([]);
+    const currentPostLanguage = useSelect((select) => select('core/editor').getEditedPostAttribute('lang'));
 
     // Initialize from global config
     useEffect(() => {
@@ -26,7 +27,11 @@ const TranslationPanel = () => {
             const currentBackend = BackendManager.getSelectedBackend();
             setSelectedBackend(currentBackend);
 
-            setLanguages(window.translationConfig.languages || []);
+            // remove current post language (if set with a "lang" attribute) from the list
+            // of possible destination languages
+            const enabledLanguages = window.translationConfig.languages || [],
+                  suitableLanguages = enabledLanguages.filter(i => !currentPostLanguage || !i.code.startsWith(currentPostLanguage));
+            setLanguages(suitableLanguages);
         }
     }, []);
 
@@ -58,7 +63,7 @@ const TranslationPanel = () => {
 
         const isTitle = mode === 'title';
         const includeAllBlocks = mode === 'all';
-        
+
         const setLoading = isTitle ? setIsTranslatingTitle : setIsTranslating;
         setLoading(true);
 
@@ -128,37 +133,6 @@ const TranslationPanel = () => {
                 </PanelRow>
             )}
 
-            {/* Title-only translation */}
-            <PanelRow>
-                <div style={{ width: '100%' }}>
-                    <div style={{ marginBottom: '8px', fontSize: '11px', color: '#757575', fontWeight: '600' }}>
-                        {__('Translate Title Only', 'wordpress-openai-translation')}
-                    </div>
-                    <LanguageDropdown
-                        languages={languages}
-                        onSelect={(language) => handleTranslation(language, 'title')}
-                        renderToggle={({ isOpen, onToggle }) => (
-                            <Button
-                                onClick={onToggle}
-                                aria-expanded={isOpen}
-                                disabled={isDisabled}
-                                variant="secondary"
-                                style={{ width: '100%' }}
-                            >
-                                {isTranslatingTitle ? (
-                                    <>
-                                        <Spinner />
-                                        {__('Translating Title...', 'wordpress-openai-translation')}
-                                    </>
-                                ) : (
-                                    __('Translate Title', 'wordpress-openai-translation')
-                                )}
-                            </Button>
-                        )}
-                    />
-                </div>
-            </PanelRow>
-
             {/* Full page translation (skips individually translated blocks) */}
             <PanelRow>
                 <div style={{ width: '100%' }}>
@@ -172,7 +146,7 @@ const TranslationPanel = () => {
                     <LanguageDropdown
                         languages={languages}
                         onSelect={(language) => handleTranslation(language, 'untranslated')}
-                        infoText={__('Skips individually translated blocks', 'wordpress-openai-translation')}
+                        infoText={__('Translate remaining untranslated blocks', 'wordpress-openai-translation')}
                         renderToggle={({ isOpen, onToggle }) => (
                             <Button
                                 onClick={onToggle}
@@ -187,7 +161,7 @@ const TranslationPanel = () => {
                                         {__('Translating...', 'wordpress-openai-translation')}
                                     </>
                                 ) : (
-                                    __('Translate Untranslated', 'wordpress-openai-translation')
+                                    __('Translate page', 'wordpress-openai-translation')
                                 )}
                             </Button>
                         )}
@@ -217,6 +191,39 @@ const TranslationPanel = () => {
                     />
                 </div>
             </PanelRow>
+
+
+            {/* Title-only translation */}
+            <PanelRow>
+                <div style={{ width: '100%' }}>
+                    <div style={{ marginBottom: '8px', fontSize: '11px', color: '#757575', fontWeight: '600' }}>
+                        {__('Translate Title Only', 'wordpress-openai-translation')}
+                    </div>
+                    <LanguageDropdown
+                        languages={languages}
+                        onSelect={(language) => handleTranslation(language, 'title')}
+                        renderToggle={({ isOpen, onToggle }) => (
+                            <Button
+                                onClick={onToggle}
+                                aria-expanded={isOpen}
+                                disabled={isDisabled}
+                                variant="secondary"
+                                style={{ width: '100%' }}
+                            >
+                                {isTranslatingTitle ? (
+                                    <>
+                                        <Spinner />
+                                        {__('Translating title...', 'wordpress-openai-translation')}
+                                    </>
+                                ) : (
+                                    __('Translate title', 'wordpress-openai-translation')
+                                )}
+                            </Button>
+                        )}
+                    />
+                </div>
+            </PanelRow>
+
         </PanelBody>
     );
 };
@@ -225,7 +232,7 @@ const TranslationSidebar = () => {
     return (
         <PluginSidebar
             name="openai-translation-sidebar"
-            title={__('Translation', 'wordpress-openai-translation')}
+            title={__('Automated translation', 'wordpress-openai-translation')}
             icon="translation"
         >
             <TranslationPanel />

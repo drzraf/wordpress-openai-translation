@@ -45,9 +45,6 @@ final readonly class TranslationPlugin
 
     public static function getLanguageList(): array
     {
-        $languagesString = defined('TRANSLATION_LANGUAGES') ? TRANSLATION_LANGUAGES : 'en_GB,en_US,fr_FR,es_ES,de_DE,it_IT,ja_JP';
-        $locales = array_map('trim', explode(',', $languagesString));
-
         $languageNames = [
             'en_GB' => __('English (GB)', 'wordpress-openai-translation'),
             'en_US' => __('English (US)', 'wordpress-openai-translation'),
@@ -56,15 +53,29 @@ final readonly class TranslationPlugin
             'de_DE' => __('German', 'wordpress-openai-translation'),
             'it_IT' => __('Italian', 'wordpress-openai-translation'),
             'ja_JP' => __('Japanese', 'wordpress-openai-translation'),
-            'pl_PL' => __('Polish', 'wordpress-openai-translation'),
             'nl_NL' => __('Dutch', 'wordpress-openai-translation'),
             'ro_RO' => __('Romanian', 'wordpress-openai-translation'),
             'pt_PT' => __('Portuguese', 'wordpress-openai-translation'),
             'cs_CZ' => __('Czech', 'wordpress-openai-translation'),
         ];
 
+        $languagesString = defined('TRANSLATION_LANGUAGES') ? TRANSLATION_LANGUAGES : 'en_GB,en_US,fr_FR,es_ES,de_DE,it_IT,ja_JP';
+        $locales = array_map('trim', explode(',', $languagesString));
+
+        // Consider languages setup in PolyLang if enabled (and if TRANSLATION_LANGUAGES contains "pll")
+        if (function_exists('pll_languages_list') && in_array('pll', $locales)) {
+            $pllLocales = array_map(fn($e) => $e->locale, pll_languages_list(['fields' => null]));
+            $pllLanguagesNames  = array_combine(
+                $pllLocales,
+                array_map(fn($e) => $e->name, pll_languages_list(['fields' => null]))
+            );
+            $languageNames = array_merge($pllLanguagesNames, $languageNames);
+            $locales = array_merge($locales, $pllLocales);
+        }
+
         $languages = [];
         foreach ($locales as $locale) {
+            if ($locale === 'pll') continue;
             $languages[] = [
                 'code' => $locale,
                 'label' => $languageNames[$locale] ?? $locale,
