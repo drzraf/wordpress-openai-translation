@@ -16,7 +16,12 @@ final class OpenAITranslator implements TranslatorInterface
 
     public function translate(string $text, string $targetLanguage): string
     {
-        $system = sprintf('You are a professional translator. You will have to answer just by giving only one translation in %s.', $targetLanguage);
+        $promptTemplate = 'You are a professional translator. You will have to answer just by giving only one translation in %s.';
+        
+        // Apply WordPress filter to allow customization of the prompt
+        $promptTemplate = apply_filters('openai_translation_prompt', $promptTemplate, $targetLanguage, 'openai');
+        
+        $system = sprintf($promptTemplate, $targetLanguage);
 
         $response = $this->openIA->chat([
             'model' => 'gpt-3.5-turbo',

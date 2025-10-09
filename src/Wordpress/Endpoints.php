@@ -5,10 +5,14 @@ namespace Translation\Wordpress;
 
 use Translation\Domain\Service\CustomLocaleValidator;
 use Translation\Domain\Service\DeepLTranslator;
+use Translation\Domain\Service\DeepseekTranslator;
+use Translation\Domain\Service\GeminiTranslator;
 use Translation\Domain\Service\GoogleTranslator;
+use Translation\Domain\Service\GrokTranslator;
 use Translation\Domain\Service\OpenAITranslator;
 use Translation\Domain\Service\SymfonyLocaleValidator;
 use Translation\Domain\Service\TranslatorInterface;
+use Translation\Wordpress\ApiKeyManager;
 use Translation\Domain\UseCase\TranslateText\TranslateText;
 use Translation\Domain\UseCase\TranslateText\TranslateTextRequest;
 use Translation\Domain\UseCase\TranslateText\TranslateTextResponse;
@@ -24,26 +28,17 @@ final class Endpoints
 
     public function register_routes(): void
     {
-        $backends = ['openai', 'google', 'deepl'];
+        $backends = ['openai', 'google', 'deepl', 'grok', 'deepseek', 'gemini'];
 
-        // Full post translation endpoints
+        // Unified translation endpoint - handles both full-page and single-block translation
+        // Single-block translation: pass empty title and single block in blocks array
+        // Full-page translation: pass title and all blocks
         foreach ($backends as $backend) {
             register_rest_route(TranslationPlugin::NAMESPACE, '/translate-' . $backend, [
                 'methods' => \WP_REST_Server::CREATABLE,
                 'permission_callback' => [$this, 'privileged_permission_callback'],
                 'callback' => function(\WP_REST_Request $request) use ($backend) {
                     return $this->translate_text($request, $backend);
-                },
-            ]);
-        }
-
-        // Block translation endpoints - reuses TranslateText use case
-        foreach ($backends as $backend) {
-            register_rest_route(TranslationPlugin::NAMESPACE, '/translate-block-' . $backend, [
-                'methods' => \WP_REST_Server::CREATABLE,
-                'permission_callback' => [$this, 'privileged_permission_callback'],
-                'callback' => function(\WP_REST_Request $request) use ($backend) {
-                    return $this->translate_single_block($request, $backend);
                 },
             ]);
         }
@@ -60,6 +55,9 @@ final class Endpoints
             'openai' => $this->createOpenAITranslator(),
             'google' => new GoogleTranslator(),
             'deepl' => $this->createDeepLTranslator(),
+            'grok' => $this->createGrokTranslator(),
+            'deepseek' => $this->createDeepseekTranslator(),
+            'gemini' => $this->createGeminiTranslator(),
             default => null,
         };
     }
@@ -79,7 +77,7 @@ final class Endpoints
 
     private function createOpenAITranslator(): ?OpenAITranslator
     {
-        $apiKey = get_option('openai_translation_api_key');
+        $apiKey = ApiKeyManager::getApiKey('openai');
         if (empty($apiKey)) {
             return null;
         }
@@ -88,13 +86,48 @@ final class Endpoints
 
     private function createDeepLTranslator(): ?DeepLTranslator
     {
-        $apiKey = get_option('deepl_translation_api_key');
+        $apiKey = ApiKeyManager::getApiKey('deepl');
         if (empty($apiKey)) {
             return null;
         }
         return new DeepLTranslator($apiKey);
     }
 
+    private function createGrokTranslator(): ?GrokTranslator
+    {
+        $apiKey = ApiKeyManager::getApiKey('grok');
+        if (empty($apiKey)) {
+            return null;
+        }
+        return new GrokTranslator($apiKey);
+    }
+
+    private function createDeepseekTranslator(): ?DeepseekTranslator
+    {
+        $apiKey = ApiKeyManager::getApiKey('deepseek');
+        if (empty($apiKey)) {
+            return null;
+        }
+        return new DeepseekTranslator($apiKey);
+    }
+
+    private function createGeminiTranslator(): ?GeminiTranslator
+    {
+        $apiKey = ApiKeyManager::getApiKey('gemini');
+        if (empty($apiKey)) {
+            return null;
+        }
+        return new GeminiTranslator($apiKey);
+    }
+
+    /**
+     * Unified translation endpoint
+     * Handles both full-page translation (title + blocks) and single-block translation
+     * 
+     * For single-block: Pass empty title and single block in blocks array
+     * For full-page: Pass title and all blocks
+     * For title-only: Pass title and empty blocks array
+     */
     public function translate_text(\WP_REST_Request $request, string $backend): \WP_REST_Response
     {
         $response = new \WP_REST_Response();
@@ -126,81 +159,6 @@ final class Endpoints
         $response->set_data($presenter->json());
         if ($presenter->hasErrors()) {
             $response->set_status(400);
-        }
-
-        return $response;
-    }
-
-    public function translate_single_block(\WP_REST_Request $request, string $backend): \WP_REST_Response
-    {
-        $response = new \WP_REST_Response();
-
-        // Create translator instance
-        $translator = $this->createTranslator($backend);
-        if (!$translator) {
-            $response->set_data([
-                'error' => 'Translation backend not available or not configured'
-            ]);
-            $response->set_status(400);
-            return $response;
-        }
-
-        $block = $request->get_param('block');
-        $language = $request->get_param('language');
-
-        if (empty($block) || empty($language)) {
-            $response->set_data([
-                'error' => 'Missing required parameters: block or language'
-            ]);
-            $response->set_status(400);
-            return $response;
-        }
-
-        try {
-            // Reuse TranslateText use case for single block translation
-            $translateText = new TranslateText($translator, $this->createValidator());
-            $translateResponse = new TranslateTextResponse();
-
-            // Translate the single block using the existing use case method
-            $translateText->translateBlock($block, $language, $translateResponse);
-
-            if ($translateResponse->hasErrors()) {
-                $response->set_data([
-                    'error' => 'Translation failed: ' . json_encode($translateResponse->getErrors())
-                ]);
-                $response->set_status(400);
-                return $response;
-            }
-
-            // Get the translated block
-            $translatedBlocks = $translateResponse->getBlocks();
-            if (empty($translatedBlocks)) {
-                $response->set_data([
-                    'error' => 'No translated content returned'
-                ]);
-                $response->set_status(500);
-                return $response;
-            }
-
-            $translatedBlock = $translatedBlocks[0];
-
-            // Extract translated content based on block type
-            $blockName = $block['name'] ?? '';
-            $contentAttribute = match($blockName) {
-                'core/list' => 'values',
-                default => 'content',
-            };
-
-            $response->set_data([
-                'translatedContent' => $translatedBlock['attributes'][$contentAttribute] ?? '',
-                'originalContent' => $block['attributes'][$contentAttribute] ?? '',
-                'blockType' => $blockName,
-            ]);
-        } catch (\Exception $e) {
-            $response->set_data([
-                'error' => $e->getMessage()
-            ]);
-            $response->set_status(500);
         }
 
         return $response;
