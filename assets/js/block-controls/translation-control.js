@@ -87,7 +87,7 @@ export const BlockTranslationControl = ({ clientId, attributes, name }) => {
     };
 
     const backendName = BackendManager.getBackendName(currentBackend);
-    const tooltipLabel = isTranslating 
+    const tooltipLabel = isTranslating
         ? __('Translating Block...', 'wordpress-openai-translation')
         : __('Translate Block', 'wordpress-openai-translation') + ' (' + backendName + ')';
 
@@ -99,7 +99,7 @@ export const BlockTranslationControl = ({ clientId, attributes, name }) => {
                     popoverProps={{ placement: 'bottom-start' }}
                     renderToggle={({ isOpen, onToggle }) => (
                         <ToolbarButton
-                            icon={isTranslating ? undefined : 'editor-quote'}
+                            icon={isTranslating ? undefined : 'translation'}
                             label={tooltipLabel}
                             onClick={onToggle}
                             aria-expanded={isOpen}
@@ -135,7 +135,7 @@ export const BlockTranslationControl = ({ clientId, attributes, name }) => {
                                             translateBlock(lang.code, currentBackend);
                                             onClose();
                                         }}
-                                        icon="editor-quote"
+                                        icon="translation"
                                         iconPosition="left"
                                     >
                                         {lang.label}

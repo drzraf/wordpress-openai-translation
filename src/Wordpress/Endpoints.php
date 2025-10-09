@@ -73,7 +73,7 @@ final class Endpoints
         ) {
             return new SymfonyLocaleValidator();
         }
-        
+
         return new CustomLocaleValidator();
     }
 
@@ -183,7 +183,7 @@ final class Endpoints
             }
 
             $translatedBlock = $translatedBlocks[0];
-            
+
             // Extract translated content based on block type
             $blockName = $block['name'] ?? '';
             $contentAttribute = match($blockName) {

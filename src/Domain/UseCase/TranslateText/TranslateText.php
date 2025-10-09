@@ -58,7 +58,7 @@ final readonly class TranslateText
 
         $this->translateTitle($request->title, $request->targetLanguage, $response);
 
-        // Translates the text of each block
+        // Translates the text of each block (recursively handles nested blocks)
         array_map(fn($block) => $this->translateBlock($block, $request->targetLanguage, $response), $request->blocks);
     }
 
@@ -66,32 +66,49 @@ final readonly class TranslateText
     {
         $blockName = $block['name'] ?? '';
         $attributes = $block['attributes'] ?? [];
+        $innerBlocks = $block['innerBlocks'] ?? [];
 
         // Extract content based on block type
         $content = match($blockName) {
             'core/paragraph', 'core/heading', 'core/quote' => $attributes['content'] ?? '',
             'core/list' => $attributes['values'] ?? '',
+            'core/button' => $attributes['text'] ?? '',
             default => $attributes['content'] ?? '',
         };
 
-        if (empty($content)) {
-            $response->addError('internal', 'internal.error.no_content for ' . $blockName);
-            return;
+        // If this block has translatable content, translate it
+        if (!empty($content)) {
+            $translation = $this->translator->translate(
+                text: $content,
+                targetLanguage: $targetLanguage
+            );
+
+            if (!$translation) {
+                $response->addError('internal', 'internal.error.translation_failed');
+                return;
+            }
+
+            // Update block with translated content
+            $block['attributes'][$this->getContentAttributeName($blockName)] = $translation;
         }
 
-        // Translate the content
-        $translation = $this->translator->translate(
-            text: $content,
-            targetLanguage: $targetLanguage
-        );
+        // Recursively translate inner blocks (for groups, columns, etc.)
+        if (!empty($innerBlocks)) {
+            $translatedInnerBlocks = [];
+            foreach ($innerBlocks as $innerBlock) {
+                $innerResponse = new TranslateTextResponse();
+                $this->translateBlock($innerBlock, $targetLanguage, $innerResponse);
 
-        if (!$translation) {
-            $response->addError('internal', 'internal.error.translation_failed');
-            return;
+                // Get the translated inner block
+                $translated = $innerResponse->getBlocks();
+                if (!empty($translated)) {
+                    $translatedInnerBlocks[] = $translated[0];
+                }
+            }
+            $block['innerBlocks'] = $translatedInnerBlocks;
         }
 
-        // Update block with translated content
-        $block['attributes'][$this->getContentAttributeName($blockName)] = $translation;
+        // Add the (possibly updated) block to response
         $response->addBlock($block);
     }
 
@@ -99,6 +116,7 @@ final readonly class TranslateText
     {
         return match($blockName) {
             'core/list' => 'values',
+            'core/button' => 'text',
             default => 'content',
         };
     }

@@ -35,6 +35,7 @@ const TranslationPanel = () => {
     };
 
     // Get current post title and blocks from the editor
+    // getBlocks() already returns the full hierarchy with innerBlocks
     const { title, blocks } = useSelect((select) => ({
         title: select('core/editor').getEditedPostAttribute('title'),
         blocks: select('core/block-editor').getBlocks(),
@@ -42,7 +43,7 @@ const TranslationPanel = () => {
 
     // Get dispatch functions for updating editor content
     const { editPost, lockPostSaving, unlockPostSaving } = useDispatch('core/editor');
-    const { replaceBlocks } = useDispatch('core/block-editor');
+    const { updateBlockAttributes } = useDispatch('core/block-editor');
     const { lockPostAutosaving, unlockPostAutosaving } = useDispatch('core/editor');
 
     const handleTranslation = async (language) => {
@@ -77,16 +78,9 @@ const TranslationPanel = () => {
             // Update the post title
             editPost({ title: response.title });
 
-            // Replace blocks with translated content
-            response.blocks.forEach((block) => {
-                const newBlock = wp.blocks.createBlock(
-                    block.name,
-                    {
-                        ...block.attributes,
-                        dropCap: block.attributes.dropCap === 'true' || block.attributes.dropCap === true,
-                    }
-                );
-                replaceBlocks(block.clientId, newBlock);
+            // Recursively update block attributes with translated content
+            response.blocks.forEach((translatedBlock) => {
+                updateBlockRecursively(translatedBlock, updateBlockAttributes);
             });
         } catch (error) {
             alert(error.message || __('Translation failed', 'wordpress-openai-translation'));
@@ -95,6 +89,25 @@ const TranslationPanel = () => {
             // Unlock the editor
             unlockPostSaving('translation-in-progress');
             unlockPostAutosaving('translation-in-progress');
+        }
+    };
+
+    // Recursively update block attributes without recreating blocks
+    // This preserves container blocks and only updates primitive blocks with translated content
+    const updateBlockRecursively = (translatedBlock, updateBlockAttributes) => {
+        // Update current block's attributes if they changed
+        if (translatedBlock.attributes) {
+            updateBlockAttributes(
+                translatedBlock.clientId,
+                translatedBlock.attributes
+            );
+        }
+
+        // Recursively update inner blocks
+        if (translatedBlock.innerBlocks && translatedBlock.innerBlocks.length > 0) {
+            translatedBlock.innerBlocks.forEach((innerBlock) => {
+                updateBlockRecursively(innerBlock, updateBlockAttributes);
+            });
         }
     };
 
