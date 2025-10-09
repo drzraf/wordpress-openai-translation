@@ -1,11 +1,12 @@
 const { __ } = wp.i18n;
 const { useState, useEffect } = wp.element;
 const { BlockControls } = wp.blockEditor;
-const { ToolbarGroup, ToolbarButton, Dropdown, MenuGroup, MenuItem, Spinner } = wp.components;
+const { ToolbarGroup, ToolbarButton, Spinner } = wp.components;
 const { useDispatch } = wp.data;
-const apiFetch = wp.apiFetch;
 
 import { BackendManager } from '../utils/backend-manager';
+import { LanguageDropdown } from '../components/LanguageDropdown';
+import { translateSingleBlock } from '../utils/translation-api';
 
 export const BlockTranslationControl = ({ clientId, attributes, name }) => {
     const [isTranslating, setIsTranslating] = useState(false);
@@ -23,7 +24,6 @@ export const BlockTranslationControl = ({ clientId, attributes, name }) => {
         const backend = BackendManager.getSelectedBackend();
         setCurrentBackend(backend);
 
-        // Listen for backend changes from sidebar
         const unsubscribe = BackendManager.onBackendChange((newBackend) => {
             setCurrentBackend(newBackend);
         });
@@ -31,7 +31,6 @@ export const BlockTranslationControl = ({ clientId, attributes, name }) => {
         return unsubscribe;
     }, []);
 
-    // Get config from global
     const languages = window.translationConfig?.languages || [];
     const restNamespace = window.translationConfig?.restNamespace || 'wp-translation/v1';
 
@@ -41,27 +40,20 @@ export const BlockTranslationControl = ({ clientId, attributes, name }) => {
         setIsTranslating(true);
 
         try {
-            // Store original content before translation
             const originalContent = attributes.content || '';
             const originalBlock = {
                 name,
                 attributes: { ...attributes }
             };
 
-            const response = await apiFetch({
-                path: `/${restNamespace}/translate-block-${backend}`,
-                method: 'POST',
-                data: {
-                    block: originalBlock,
-                    language,
-                },
+            const response = await translateSingleBlock({
+                backend,
+                block: originalBlock,
+                language,
+                restNamespace
             });
 
-            if (response.error) {
-                throw new Error(response.error);
-            }
-
-            // Update block with translated content and backup
+            // Update block with translated content and marker
             updateBlockAttributes(clientId, {
                 content: response.translatedContent,
                 _translationBackup: {
@@ -71,6 +63,11 @@ export const BlockTranslationControl = ({ clientId, attributes, name }) => {
                     backend,
                     backendName: BackendManager.getBackendName(backend),
                 },
+                _individuallyTranslated: {
+                    timestamp: Date.now(),
+                    language,
+                    backend,
+                }
             });
         } catch (error) {
             console.error('Block translation failed:', error);
@@ -94,9 +91,12 @@ export const BlockTranslationControl = ({ clientId, attributes, name }) => {
     return (
         <BlockControls>
             <ToolbarGroup>
-                <Dropdown
-                    className="block-translation-dropdown"
-                    popoverProps={{ placement: 'bottom-start' }}
+                <LanguageDropdown
+                    languages={languages}
+                    onSelect={(language) => translateBlock(language, currentBackend)}
+                    headerText={__('Block Translation', 'wordpress-openai-translation')}
+                    showBackendInfo={true}
+                    backendName={backendName}
                     renderToggle={({ isOpen, onToggle }) => (
                         <ToolbarButton
                             icon={isTranslating ? undefined : 'translation'}
@@ -110,39 +110,6 @@ export const BlockTranslationControl = ({ clientId, attributes, name }) => {
                         >
                             {isTranslating && <Spinner style={{ margin: 0 }} />}
                         </ToolbarButton>
-                    )}
-                    renderContent={({ onClose }) => (
-                        <div style={{ minWidth: '200px' }}>
-                            <div style={{
-                                padding: '8px 12px',
-                                borderBottom: '1px solid #ddd',
-                                fontSize: '11px',
-                                color: '#666',
-                                background: '#f9f9f9'
-                            }}>
-                                <div style={{ fontWeight: '600', marginBottom: '2px' }}>
-                                    {__('Block Translation', 'wordpress-openai-translation')}
-                                </div>
-                                <div>
-                                    {__('Using:', 'wordpress-openai-translation')} <strong>{backendName}</strong>
-                                </div>
-                            </div>
-                            <MenuGroup>
-                                {languages.map((lang) => (
-                                    <MenuItem
-                                        key={lang.code}
-                                        onClick={() => {
-                                            translateBlock(lang.code, currentBackend);
-                                            onClose();
-                                        }}
-                                        icon="translation"
-                                        iconPosition="left"
-                                    >
-                                        {lang.label}
-                                    </MenuItem>
-                                ))}
-                            </MenuGroup>
-                        </div>
                     )}
                 />
             </ToolbarGroup>

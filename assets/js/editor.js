@@ -1,15 +1,18 @@
 const { __ } = wp.i18n;
 const { registerPlugin } = wp.plugins;
 const { useState, useEffect } = wp.element;
-const { PanelBody, PanelRow, Button, Dropdown, MenuGroup, MenuItem, Spinner, SelectControl } = wp.components;
+const { PanelBody, PanelRow, Button, Spinner, SelectControl } = wp.components;
 const { PluginSidebar } = wp.editPost;
 const { useSelect, useDispatch } = wp.data;
-const apiFetch = wp.apiFetch;
 
 import { BackendManager } from './utils/backend-manager';
+import { LanguageDropdown } from './components/LanguageDropdown';
+import { translateFullPage, withEditorLock, updateBlockRecursively } from './utils/translation-api';
+import { filterUntranslatedBlocks } from './utils/block-filters';
 
 const TranslationPanel = () => {
     const [isTranslating, setIsTranslating] = useState(false);
+    const [isTranslatingTitle, setIsTranslatingTitle] = useState(false);
     const [selectedBackend, setSelectedBackend] = useState('');
     const [backends, setBackends] = useState({});
     const [languages, setLanguages] = useState([]);
@@ -20,7 +23,6 @@ const TranslationPanel = () => {
             const availableBackends = window.translationConfig.backends || {};
             setBackends(availableBackends);
 
-            // Get backend from manager (synced across components)
             const currentBackend = BackendManager.getSelectedBackend();
             setSelectedBackend(currentBackend);
 
@@ -34,85 +36,77 @@ const TranslationPanel = () => {
         BackendManager.setSelectedBackend(backend);
     };
 
-    // Get current post title and blocks from the editor
-    // getBlocks() already returns the full hierarchy with innerBlocks
+    // Get current post title and blocks
     const { title, blocks } = useSelect((select) => ({
         title: select('core/editor').getEditedPostAttribute('title'),
         blocks: select('core/block-editor').getBlocks(),
     }), []);
 
-    // Get dispatch functions for updating editor content
-    const { editPost, lockPostSaving, unlockPostSaving } = useDispatch('core/editor');
+    // Get dispatch functions
+    const dispatch = useDispatch();
+    const { editPost } = useDispatch('core/editor');
     const { updateBlockAttributes } = useDispatch('core/block-editor');
-    const { lockPostAutosaving, unlockPostAutosaving } = useDispatch('core/editor');
 
-    const handleTranslation = async (language) => {
+    const restNamespace = window.translationConfig?.restNamespace || 'wp-translation/v1';
+
+    // Generic translation handler
+    const handleTranslation = async (language, mode) => {
         if (!selectedBackend) {
             alert(__('No translation backend selected', 'wordpress-openai-translation'));
             return;
         }
 
-        setIsTranslating(true);
-
-        // Lock the editor to prevent concurrent edits
-        lockPostSaving('translation-in-progress');
-        lockPostAutosaving('translation-in-progress');
+        const isTitle = mode === 'title';
+        const includeAllBlocks = mode === 'all';
+        
+        const setLoading = isTitle ? setIsTranslatingTitle : setIsTranslating;
+        setLoading(true);
 
         try {
-            const restNamespace = window.translationConfig?.restNamespace || 'wp-translation/v1';
-            const response = await apiFetch({
-                path: `/${restNamespace}/translate-${selectedBackend}`,
-                method: 'POST',
-                data: {
+            await withEditorLock(dispatch, async () => {
+                // Prepare blocks based on mode
+                let blocksToTranslate;
+                if (isTitle) {
+                    blocksToTranslate = [];
+                } else if (includeAllBlocks) {
+                    blocksToTranslate = blocks;
+                } else {
+                    blocksToTranslate = filterUntranslatedBlocks(blocks);
+                    if (blocksToTranslate.length === 0) {
+                        alert(__('All blocks have been individually translated. Use "Re-translate All" to override.', 'wordpress-openai-translation'));
+                        return;
+                    }
+                }
+
+                // Call API
+                const response = await translateFullPage({
+                    backend: selectedBackend,
                     title,
-                    blocks,
+                    blocks: blocksToTranslate,
                     language,
-                },
-            });
+                    restNamespace
+                });
 
-            if (response.errors) {
-                const errorMessages = Object.values(response.errors).join(', ');
-                throw new Error(errorMessages);
-            }
+                // Update title
+                editPost({ title: response.title });
 
-            // Update the post title
-            editPost({ title: response.title });
-
-            // Recursively update block attributes with translated content
-            response.blocks.forEach((translatedBlock) => {
-                updateBlockRecursively(translatedBlock, updateBlockAttributes);
+                // Update blocks recursively if not title-only
+                if (!isTitle) {
+                    response.blocks.forEach((translatedBlock) => {
+                        updateBlockRecursively(translatedBlock, updateBlockAttributes);
+                    });
+                }
             });
         } catch (error) {
             alert(error.message || __('Translation failed', 'wordpress-openai-translation'));
         } finally {
-            setIsTranslating(false);
-            // Unlock the editor
-            unlockPostSaving('translation-in-progress');
-            unlockPostAutosaving('translation-in-progress');
-        }
-    };
-
-    // Recursively update block attributes without recreating blocks
-    // This preserves container blocks and only updates primitive blocks with translated content
-    const updateBlockRecursively = (translatedBlock, updateBlockAttributes) => {
-        // Update current block's attributes if they changed
-        if (translatedBlock.attributes) {
-            updateBlockAttributes(
-                translatedBlock.clientId,
-                translatedBlock.attributes
-            );
-        }
-
-        // Recursively update inner blocks
-        if (translatedBlock.innerBlocks && translatedBlock.innerBlocks.length > 0) {
-            translatedBlock.innerBlocks.forEach((innerBlock) => {
-                updateBlockRecursively(innerBlock, updateBlockAttributes);
-            });
+            setLoading(false);
         }
     };
 
     const backendKeys = Object.keys(backends);
     const showBackendSelector = backendKeys.length > 1;
+    const isDisabled = isTranslating || isTranslatingTitle || !selectedBackend;
 
     return (
         <PanelBody title={__('Translation', 'wordpress-openai-translation')}>
@@ -129,11 +123,43 @@ const TranslationPanel = () => {
                             }))
                         ]}
                         onChange={handleBackendChange}
-                        disabled={isTranslating}
+                        disabled={isDisabled}
                     />
                 </PanelRow>
             )}
 
+            {/* Title-only translation */}
+            <PanelRow>
+                <div style={{ width: '100%' }}>
+                    <div style={{ marginBottom: '8px', fontSize: '11px', color: '#757575', fontWeight: '600' }}>
+                        {__('Translate Title Only', 'wordpress-openai-translation')}
+                    </div>
+                    <LanguageDropdown
+                        languages={languages}
+                        onSelect={(language) => handleTranslation(language, 'title')}
+                        renderToggle={({ isOpen, onToggle }) => (
+                            <Button
+                                onClick={onToggle}
+                                aria-expanded={isOpen}
+                                disabled={isDisabled}
+                                variant="secondary"
+                                style={{ width: '100%' }}
+                            >
+                                {isTranslatingTitle ? (
+                                    <>
+                                        <Spinner />
+                                        {__('Translating Title...', 'wordpress-openai-translation')}
+                                    </>
+                                ) : (
+                                    __('Translate Title', 'wordpress-openai-translation')
+                                )}
+                            </Button>
+                        )}
+                    />
+                </div>
+            </PanelRow>
+
+            {/* Full page translation (skips individually translated blocks) */}
             <PanelRow>
                 <div style={{ width: '100%' }}>
                     <div style={{ marginBottom: '8px', fontSize: '11px', color: '#757575' }}>
@@ -143,15 +169,15 @@ const TranslationPanel = () => {
                             </span>
                         )}
                     </div>
-                    <Dropdown
-                        className="translation-dropdown"
-                        contentClassName="translation-dropdown-content"
-                        position="bottom left"
+                    <LanguageDropdown
+                        languages={languages}
+                        onSelect={(language) => handleTranslation(language, 'untranslated')}
+                        infoText={__('Skips individually translated blocks', 'wordpress-openai-translation')}
                         renderToggle={({ isOpen, onToggle }) => (
                             <Button
                                 onClick={onToggle}
                                 aria-expanded={isOpen}
-                                disabled={isTranslating || !selectedBackend}
+                                disabled={isDisabled}
                                 variant="secondary"
                                 style={{ width: '100%' }}
                             >
@@ -161,24 +187,32 @@ const TranslationPanel = () => {
                                         {__('Translating...', 'wordpress-openai-translation')}
                                     </>
                                 ) : (
-                                    __('Translate to...', 'wordpress-openai-translation')
+                                    __('Translate Untranslated', 'wordpress-openai-translation')
                                 )}
                             </Button>
                         )}
-                        renderContent={({ onClose }) => (
-                            <MenuGroup label={__('Select Language', 'wordpress-openai-translation')}>
-                                {languages.map((lang) => (
-                                    <MenuItem
-                                        key={lang.code}
-                                        onClick={() => {
-                                            handleTranslation(lang.code);
-                                            onClose();
-                                        }}
-                                    >
-                                        {lang.label}
-                                    </MenuItem>
-                                ))}
-                            </MenuGroup>
+                    />
+                </div>
+            </PanelRow>
+
+            {/* Re-translate all (including individually translated blocks) */}
+            <PanelRow>
+                <div style={{ width: '100%' }}>
+                    <LanguageDropdown
+                        languages={languages}
+                        onSelect={(language) => handleTranslation(language, 'all')}
+                        infoText={__('Translates all blocks, including previously translated', 'wordpress-openai-translation')}
+                        renderToggle={({ isOpen, onToggle }) => (
+                            <Button
+                                onClick={onToggle}
+                                aria-expanded={isOpen}
+                                disabled={isDisabled}
+                                variant="secondary"
+                                style={{ width: '100%' }}
+                                isDestructive
+                            >
+                                {__('Re-translate All', 'wordpress-openai-translation')}
+                            </Button>
                         )}
                     />
                 </div>

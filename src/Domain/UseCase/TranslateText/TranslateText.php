@@ -29,9 +29,10 @@ final readonly class TranslateText
         if (empty($request->title)) {
             $response->addError('title', 'form.title.required');
         }
-        if (empty($request->blocks)) {
-            $response->addError('blocks', 'form.blocks.required');
-        }
+        // Allow empty blocks array for title-only translation
+        // if (empty($request->blocks)) {
+        //     $response->addError('blocks', 'form.blocks.required');
+        // }
         if (empty($request->targetLanguage)) {
             $response->addError('targetLanguage', 'form.targetLanguage.required');
         }
@@ -59,7 +60,10 @@ final readonly class TranslateText
         $this->translateTitle($request->title, $request->targetLanguage, $response);
 
         // Translates the text of each block (recursively handles nested blocks)
-        array_map(fn($block) => $this->translateBlock($block, $request->targetLanguage, $response), $request->blocks);
+        // Skip if blocks array is empty (title-only translation)
+        if (!empty($request->blocks)) {
+            array_map(fn($block) => $this->translateBlock($block, $request->targetLanguage, $response), $request->blocks);
+        }
     }
 
     public function translateBlock(array $block, string $targetLanguage, TranslateTextResponse $response): void
