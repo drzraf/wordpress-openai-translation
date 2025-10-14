@@ -16,7 +16,6 @@ const TranslationPanel = () => {
     const [selectedBackend, setSelectedBackend] = useState('');
     const [backends, setBackends] = useState({});
     const [languages, setLanguages] = useState([]);
-    const currentPostLanguage = useSelect((select) => select('core/editor').getEditedPostAttribute('lang'));
 
     // Initialize from global config
     useEffect(() => {
@@ -27,11 +26,7 @@ const TranslationPanel = () => {
             const currentBackend = BackendManager.getSelectedBackend();
             setSelectedBackend(currentBackend);
 
-            // remove current post language (if set with a "lang" attribute) from the list
-            // of possible destination languages
-            const enabledLanguages = window.translationConfig.languages || [],
-                  suitableLanguages = enabledLanguages.filter(i => !currentPostLanguage || !i.code.startsWith(currentPostLanguage));
-            setLanguages(suitableLanguages);
+            setLanguages(window.translationConfig.languages || []);
         }
     }, []);
 
