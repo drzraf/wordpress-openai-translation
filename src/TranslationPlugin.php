@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Translation;
 
+use Translation\Wordpress\ApiKeyManager;
 use Translation\Wordpress\Endpoints;
 use Translation\Wordpress\Installation;
 use Translation\Wordpress\ManageAssets;
@@ -12,14 +13,9 @@ final readonly class TranslationPlugin
 {
     const NAMESPACE = 'wp-translation/v1';
 
-    public function __construct(
-        private string $file,
-        private string $openaiApiKey,
-        private string $deeplApiKey,
-        private string $validatorName
-    )
+    public function __construct(private string $file)
     {
-        new Installation($this->file, $this->validatorName, $this->openaiApiKey, $this->deeplApiKey);
+        new Installation($this->file);
         new SettingsPage($this->file);
         new Endpoints();
         new ManageAssets($this->file);
@@ -27,20 +23,13 @@ final readonly class TranslationPlugin
 
     public static function getAvailableBackends(): array
     {
-        $backends = [];
+        return ApiKeyManager::getAvailableBackends();
+    }
 
-        if (get_option('openai_translation_api_key')) {
-            $backends['openai'] = 'OpenAI';
-        }
-
-        // Google Translate is always available (no API key required)
-        $backends['google'] = 'Google Translate';
-
-        if (get_option('deepl_translation_api_key')) {
-            $backends['deepl'] = 'DeepL';
-        }
-
-        return $backends;
+    public static function getSupportedBlockTypes(): array
+    {
+        // Call static method directly from TranslateText use case
+        return \Translation\Domain\UseCase\TranslateText\TranslateText::getSupportedBlockTypes();
     }
 
     public static function getLanguageList(): array

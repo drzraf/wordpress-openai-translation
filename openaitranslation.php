@@ -14,14 +14,28 @@ if (!function_exists('add_action')) {
     exit;
 }
 
+// Define API keys from environment variables if not already defined
+// These can be overridden in wp-config.php
 if (!defined('OPENAI_API_KEY')) {
     define('OPENAI_API_KEY', getenv('OPENAI_API_KEY') ?: '');
 }
 if (!defined('DEEPL_API_KEY')) {
     define('DEEPL_API_KEY', getenv('DEEPL_API_KEY') ?: '');
 }
+if (!defined('GROK_API_KEY')) {
+    define('GROK_API_KEY', getenv('GROK_API_KEY') ?: '');
+}
+if (!defined('DEEPSEEK_API_KEY')) {
+    define('DEEPSEEK_API_KEY', getenv('DEEPSEEK_API_KEY') ?: '');
+}
+if (!defined('GEMINI_API_KEY')) {
+    define('GEMINI_API_KEY', getenv('GEMINI_API_KEY') ?: '');
+}
 
-define('OPENAI_TRANSLATION_VALIDATOR', getenv('OPENAI_TRANSLATION_VALIDATOR') ?: 'custom');
+// Validator configuration
+if (!defined('OPENAI_TRANSLATION_VALIDATOR')) {
+    define('OPENAI_TRANSLATION_VALIDATOR', getenv('OPENAI_TRANSLATION_VALIDATOR') ?: 'custom');
+}
 
 // Configurable language list - comma-separated locale codes
 if (!defined('TRANSLATION_LANGUAGES')) {
@@ -33,4 +47,6 @@ if (file_exists($autoload)) {
     require $autoload;
 }
 
-$plugin = new Translation\TranslationPlugin(__FILE__, OPENAI_API_KEY, DEEPL_API_KEY, OPENAI_TRANSLATION_VALIDATOR);
+// Initialize plugin with simplified constructor
+// API keys are now managed through ApiKeyManager (define() constants take priority over WP options)
+$plugin = new Translation\TranslationPlugin(__FILE__);

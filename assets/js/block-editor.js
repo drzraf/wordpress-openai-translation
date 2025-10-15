@@ -2,25 +2,20 @@ const { addFilter } = wp.hooks;
 const { createHigherOrderComponent } = wp.compose;
 const { Fragment } = wp.element;
 
-import { BlockTranslationControl } from './block-controls/translation-control';
-import { BlockRollbackControl } from './block-controls/rollback-control';
+import { UnifiedTranslationControl } from './block-controls/unified-translation-control';
 import { BatchTranslationControl } from './block-controls/batch-translation';
 
-// Add translation and rollback controls to supported blocks
+// Add unified translation control (handles both translate and undo)
 const withTranslationControls = createHigherOrderComponent((BlockEdit) => {
     return (props) => {
         const { clientId, attributes, name } = props;
 
         return (
             <Fragment>
-                <BlockTranslationControl
+                <UnifiedTranslationControl
                     clientId={clientId}
                     attributes={attributes}
                     name={name}
-                />
-                <BlockRollbackControl
-                    clientId={clientId}
-                    attributes={attributes}
                 />
                 <BlockEdit {...props} />
             </Fragment>

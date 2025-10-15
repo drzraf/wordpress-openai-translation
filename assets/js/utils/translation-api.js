@@ -42,22 +42,35 @@ export const translateFullPage = async ({ backend, title, blocks, language, rest
 
 /**
  * Translate a single block
+ * Uses the same unified endpoint as translateFullPage
  */
 export const translateSingleBlock = async ({ backend, block, language, restNamespace }) => {
+    // Use unified translation endpoint (same as translateFullPage)
     const response = await apiFetch({
-        path: `/${restNamespace}/translate-block-${backend}`,
+        path: `/${restNamespace}/translate-${backend}`,
         method: 'POST',
         data: {
-            block,
+            title: '', // Empty title for block-only translation
+            blocks: [block], // Wrap single block in array
             language,
         },
     });
 
-    if (response.error) {
-        throw new Error(response.error);
+    if (response.errors) {
+        const errorMessages = Object.values(response.errors).join(', ');
+        throw new Error(errorMessages);
     }
 
-    return response;
+    // Unwrap single block from array response
+    const translatedBlock = response.blocks?.[0];
+    if (!translatedBlock) {
+        throw new Error(__('No translated content returned', 'wordpress-openai-translation'));
+    }
+
+    return {
+        translatedBlock,
+        blockType: block.name || '',
+    };
 };
 
 /**

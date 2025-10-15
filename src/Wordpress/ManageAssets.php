@@ -56,12 +56,13 @@ final class ManageAssets
             false
         );
 
-        // Pass available backends, languages, and REST API namespace to JS
+        // Pass available backends, languages, supported blocks, and REST API namespace to JS
         // Make config available to all scripts
         $config = [
             'restNamespace' => TranslationPlugin::NAMESPACE,
             'backends' => TranslationPlugin::getAvailableBackends(),
             'languages' => TranslationPlugin::getLanguageList(),
+            'supportedBlocks' => TranslationPlugin::getSupportedBlockTypes(),
         ];
 
         wp_localize_script('openai-translation-gutenberg-editor', 'translationConfig', $config);
