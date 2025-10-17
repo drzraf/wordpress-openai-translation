@@ -9,10 +9,10 @@ final class GoogleTranslator implements TranslatorInterface
 {
     private const API_URL = 'https://translate.googleapis.com/translate_a/single';
 
-    public function translate(string $text, string $targetLanguage): string
+    public function translate(string $text, string $targetLocale): string
     {
         // Convert WordPress locale format (e.g., en_US) to Google's format (e.g., en)
-        $langCode = $this->convertLocaleToLanguageCode($targetLanguage);
+        $langCode = $this->convertLocaleToLanguageCode($targetLocale);
 
         $queryParams = http_build_query([
             'client' => 'gtx',
@@ -24,12 +24,16 @@ final class GoogleTranslator implements TranslatorInterface
 
         $url = self::API_URL . '?' . $queryParams;
 
+        $queryParams = apply_filters('openai_translation_http_request_fields', $queryParams, $url, []);
+
         $response = wp_remote_get($url, [
             'timeout' => 30,
             'headers' => [
                 'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             ]
         ]);
+
+        do_action('openai_translation_http_response', $response, $url, [], $queryParams);
 
         if (is_wp_error($response)) {
             throw new RuntimeException('Google Translate API error: ' . $response->get_error_message());

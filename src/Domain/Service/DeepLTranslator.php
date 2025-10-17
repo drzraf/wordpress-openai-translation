@@ -14,17 +14,21 @@ final class DeepLTranslator implements TranslatorInterface
     {
     }
 
-    public function translate(string $text, string $targetLanguage): string
+    public function translate(string $text, string $targetLocale): string
     {
         if (!$this->apiKey) {
             throw new RuntimeException('DeepL API key is required');
         }
 
         // Convert WordPress locale format to DeepL format (e.g., en_US -> EN-US, en_GB -> EN-GB)
-        $targetLang = $this->convertLocaleToDeepLCode($targetLanguage);
+        $targetLang = $this->convertLocaleToDeepLCode($targetLocale);
 
         // Determine API URL based on key type (free keys end with :fx)
         $apiUrl = str_ends_with($this->apiKey, ':fx') ? self::API_URL_FREE : self::API_URL_PRO;
+        $body = [
+            'text' => $text,
+            'target_lang' => $targetLang,
+        ];
 
         $response = wp_remote_post($apiUrl, [
             'timeout' => 30,
@@ -32,11 +36,10 @@ final class DeepLTranslator implements TranslatorInterface
                 'Authorization' => 'DeepL-Auth-Key ' . $this->apiKey,
                 'Content-Type' => 'application/x-www-form-urlencoded',
             ],
-            'body' => [
-                'text' => $text,
-                'target_lang' => $targetLang,
-            ]
+            'body' => $body
         ]);
+
+        do_action('openai_translation_http_response', $response, $apiUrl, [], $body);
 
         if (is_wp_error($response)) {
             throw new RuntimeException('DeepL API error: ' . $response->get_error_message());
