@@ -5,7 +5,7 @@ namespace Translation\Domain\Service;
 
 use RuntimeException;
 
-final class GrokTranslator implements TranslatorInterface
+final class GrokTranslator extends AbstractAITranslator
 {
     private const API_URL = 'https://api.x.ai/v1/chat/completions';
 
@@ -13,14 +13,15 @@ final class GrokTranslator implements TranslatorInterface
     {
     }
 
-    public function translate(string $text, string $targetLanguage): string
+    protected function getEngineIdentifier(): string
     {
-        $promptTemplate = 'You are a professional translator. Translate the following text to %s. Return only the translated text without explanations or additional comments. If you can\'t identify the language, respond with the original text.';
-        
-        // Apply WordPress filter to allow customization of the prompt
-        $promptTemplate = apply_filters('openai_translation_prompt', $promptTemplate, $targetLanguage, 'grok');
-        
-        $systemPrompt = sprintf($promptTemplate, $targetLanguage);
+        return 'grok';
+    }
+
+    public function translate(string $text, string $targetLocale): string
+    {
+        // Use inherited buildPrompt method
+        $systemPrompt = $this->buildPrompt($targetLocale);
 
         $payload = [
             'model' => 'grok-beta',
@@ -64,7 +65,7 @@ final class GrokTranslator implements TranslatorInterface
     private function makeRequest(array $payload): string|false
     {
         $ch = curl_init(self::API_URL);
-        
+
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_POST => true,
@@ -78,7 +79,7 @@ final class GrokTranslator implements TranslatorInterface
 
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        
+
         curl_close($ch);
 
         if ($httpCode !== 200) {

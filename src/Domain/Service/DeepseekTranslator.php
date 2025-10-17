@@ -5,7 +5,7 @@ namespace Translation\Domain\Service;
 
 use RuntimeException;
 
-final class DeepseekTranslator implements TranslatorInterface
+final class DeepseekTranslator extends AbstractAITranslator
 {
     private const API_URL = 'https://api.deepseek.com/chat/completions';
 
@@ -13,21 +13,22 @@ final class DeepseekTranslator implements TranslatorInterface
     {
     }
 
-    public function translate(string $text, string $targetLanguage): string
+    protected function getEngineIdentifier(): string
     {
-        $promptTemplate = 'Translate the following text to %s. Return only the translated text without explanations or additional comments:';
-        
-        // Apply WordPress filter to allow customization of the prompt
-        $promptTemplate = apply_filters('openai_translation_prompt', $promptTemplate, $targetLanguage, 'deepseek');
-        
-        $prompt = sprintf($promptTemplate, $targetLanguage) . "\n\n" . $text;
+        return 'deepseek';
+    }
+
+    public function translate(string $text, string $targetLocale): string
+    {
+        // Use inherited buildPrompt method
+        $prompt = $this->buildPrompt($targetLocale);
 
         $payload = [
             'model' => 'deepseek-chat',
             'messages' => [
                 [
                     'role' => 'user',
-                    'content' => $prompt
+                    'content' => $prompt . "\n\n" . $text
                 ]
             ]
         ];
@@ -58,7 +59,7 @@ final class DeepseekTranslator implements TranslatorInterface
     private function makeRequest(array $payload): string|false
     {
         $ch = curl_init(self::API_URL);
-        
+
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_POST => true,
@@ -72,7 +73,7 @@ final class DeepseekTranslator implements TranslatorInterface
 
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        
+
         curl_close($ch);
 
         if ($httpCode !== 200) {

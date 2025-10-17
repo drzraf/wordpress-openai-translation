@@ -5,7 +5,7 @@ namespace Translation\Domain\Service;
 
 use RuntimeException;
 
-final class GeminiTranslator implements TranslatorInterface
+final class GeminiTranslator extends AbstractAITranslator
 {
     private const API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent';
 
@@ -13,21 +13,22 @@ final class GeminiTranslator implements TranslatorInterface
     {
     }
 
-    public function translate(string $text, string $targetLanguage): string
+    protected function getEngineIdentifier(): string
     {
-        $promptTemplate = 'Translate the following text to %s. Return only the translated text without explanations or additional comments:';
-        
-        // Apply WordPress filter to allow customization of the prompt
-        $promptTemplate = apply_filters('openai_translation_prompt', $promptTemplate, $targetLanguage, 'gemini');
-        
-        $prompt = sprintf($promptTemplate, $targetLanguage) . "\n\n" . $text;
+        return 'gemini';
+    }
+
+    public function translate(string $text, string $targetLocale): string
+    {
+        // Use inherited buildPrompt method
+        $prompt = $this->buildPrompt($targetLocale);
 
         $payload = [
             'contents' => [
                 [
                     'parts' => [
                         [
-                            'text' => $prompt
+                            'text' => $prompt . "\n\n" . $text
                         ]
                     ]
                 ]
@@ -61,9 +62,9 @@ final class GeminiTranslator implements TranslatorInterface
     {
         // Gemini uses API key as query parameter
         $url = self::API_URL . '?key=' . $this->apiKey;
-        
+
         $ch = curl_init($url);
-        
+
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_POST => true,
@@ -76,7 +77,7 @@ final class GeminiTranslator implements TranslatorInterface
 
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        
+
         curl_close($ch);
 
         if ($httpCode !== 200) {

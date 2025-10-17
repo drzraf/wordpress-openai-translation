@@ -53,7 +53,7 @@ final readonly class TranslationPlugin
 
         // Consider languages setup in PolyLang if enabled (and if TRANSLATION_LANGUAGES contains "pll")
         if (function_exists('pll_languages_list') && in_array('pll', $locales)) {
-            $pllLocales = array_map(fn($e) => $e->locale, pll_languages_list(['fields' => null]));
+            $pllLocales = array_map(fn($e) => str_replace('_formal', '', $e->locale), pll_languages_list(['fields' => null]));
             $pllLanguagesNames  = array_combine(
                 $pllLocales,
                 array_map(fn($e) => $e->name, pll_languages_list(['fields' => null]))
@@ -72,5 +72,15 @@ final readonly class TranslationPlugin
         }
 
         return $languages;
+    }
+
+    public static function localeToLanguage($locale)
+    {
+        $l = TranslationPlugin::getLanguageList();
+        $keys = array_combine(
+            array_map(fn($e) => $e['code'], $l),
+            array_map(fn($e) => $e['label'], $l)
+        );
+        return $keys[$locale] ?? $locale;
     }
 }

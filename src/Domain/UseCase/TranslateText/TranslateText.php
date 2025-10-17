@@ -58,22 +58,25 @@ final readonly class TranslateText
             return;
         }
 
+        // Use targetLocale for semantic clarity (it's a locale code like 'en_US')
+        $targetLocale = $request->targetLanguage;
+
         // Translate title if provided
         if (!empty($request->title)) {
-            $this->translateTitle($request->title, $request->targetLanguage, $response);
+            $this->translateTitle($request->title, $targetLocale, $response);
         }
 
         // Translates the text of each block (recursively handles nested blocks)
         // Skip if blocks array is empty (title-only translation)
         if (!empty($request->blocks)) {
-            array_map(fn($block) => $this->translateBlock($block, $request->targetLanguage, $response), $request->blocks);
+            array_map(fn($block) => $this->translateBlock($block, $targetLocale, $response), $request->blocks);
         }
     }
 
     /**
      * Get default block-to-attributes mapping
      * Returns array mapping block names to their translatable attributes
-     * 
+     *
      * @return array Array mapping block names to attribute arrays
      */
     private static function getDefaultBlockAttributesMap(): array
@@ -122,7 +125,7 @@ final readonly class TranslateText
     /**
      * Get translatable attributes for a given block type
      * Returns array of attribute names that contain translatable content
-     * 
+     *
      * @param string $blockName The block type name (e.g., 'core/paragraph')
      * @return array Array of attribute names that should be translated
      */
@@ -133,14 +136,14 @@ final readonly class TranslateText
 
         /**
          * Filter translatable attributes for a block type
-         * 
+         *
          * Allows themes and plugins to add or modify translatable attributes for any block type.
-         * 
+         *
          * @since 1.2.0
-         * 
+         *
          * @param array  $attributes Array of attribute names to translate
          * @param string $blockName  The block type name (e.g., 'core/paragraph')
-         * 
+         *
          * @example
          * // Add custom block translation support
          * add_filter('openai_translation_block_attributes', function($attributes, $blockName) {
@@ -157,7 +160,7 @@ final readonly class TranslateText
      * Get all supported block types (public static for frontend access)
      * Returns array of block names that have translatable content
      * Reuses the block list from getDefaultBlockAttributesMap() to avoid duplication
-     * 
+     *
      * @return array Array of supported block type names
      */
     public static function getSupportedBlockTypes(): array
@@ -167,22 +170,22 @@ final readonly class TranslateText
 
         /**
          * Filter supported block types for translation
-         * 
+         *
          * Allows themes and plugins to add custom block types to the translation system.
          * When adding custom blocks, also use the 'openai_translation_block_attributes' filter
          * to specify which attributes should be translated.
-         * 
+         *
          * @since 1.2.0
-         * 
+         *
          * @param array $supportedBlocks Array of block type names
-         * 
+         *
          * @example
          * // Add custom block type
          * add_filter('openai_translation_supported_blocks', function($blocks) {
          *     $blocks[] = 'my-plugin/custom-block';
          *     return $blocks;
          * });
-         * 
+         *
          * // Then specify its translatable attributes
          * add_filter('openai_translation_block_attributes', function($attributes, $blockName) {
          *     if ($blockName === 'my-plugin/custom-block') {
@@ -194,7 +197,7 @@ final readonly class TranslateText
         return apply_filters('openai_translation_supported_blocks', $supportedBlocks);
     }
 
-    public function translateBlock(array $block, string $targetLanguage, TranslateTextResponse $response): void
+    public function translateBlock(array $block, string $targetLocale, TranslateTextResponse $response): void
     {
         $blockName = $block['name'] ?? '';
         $attributes = $block['attributes'] ?? [];
@@ -210,7 +213,7 @@ final readonly class TranslateText
             if (!empty($content)) {
                 $translation = $this->translator->translate(
                     text: $content,
-                    targetLanguage: $targetLanguage
+                    targetLocale: $targetLocale
                 );
 
                 if (!$translation) {
@@ -228,7 +231,7 @@ final readonly class TranslateText
             $translatedInnerBlocks = [];
             foreach ($innerBlocks as $innerBlock) {
                 $innerResponse = new TranslateTextResponse();
-                $this->translateBlock($innerBlock, $targetLanguage, $innerResponse);
+                $this->translateBlock($innerBlock, $targetLocale, $innerResponse);
 
                 // Get the translated inner block
                 $translated = $innerResponse->getBlocks();
@@ -243,11 +246,11 @@ final readonly class TranslateText
         $response->addBlock($block);
     }
 
-    private function translateTitle(string $title, string $targetLanguage, TranslateTextResponse $response): void
+    private function translateTitle(string $title, string $targetLocale, TranslateTextResponse $response): void
     {
         $title = $this->translator->translate(
             text: $title,
-            targetLanguage: $targetLanguage
+            targetLocale: $targetLocale
         );
 
         if (!$title) {
